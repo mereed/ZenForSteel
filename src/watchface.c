@@ -14,6 +14,59 @@ bool weekday = true;
 bool date = false;
 bool month = false;
 
+static uint8_t batteryPercent;
+static GBitmap *battery_image;
+static BitmapLayer *battery_image_layer;
+static BitmapLayer *battery_layer;
+
+static GBitmap *bluetooth_image;
+static BitmapLayer *bluetooth_layer;
+
+void change_battery_icon(bool charging) {
+  gbitmap_destroy(battery_image);
+  if(charging) {
+    battery_image = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_BATTERY_CHARGE);
+  }
+  else {
+    battery_image = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_BATTERY);
+  }  
+  bitmap_layer_set_bitmap(battery_image_layer, battery_image);
+  layer_mark_dirty(bitmap_layer_get_layer(battery_image_layer));
+}
+
+static void update_battery(BatteryChargeState charge_state) {
+
+  batteryPercent = charge_state.charge_percent;
+
+  if(batteryPercent==100) {
+	change_battery_icon(false); 
+    return;
+  }
+
+  layer_set_hidden(bitmap_layer_get_layer(battery_layer), charge_state.is_charging);
+  change_battery_icon(charge_state.is_charging);
+    
+}
+
+static void toggle_bluetooth_icon(bool connected) {
+  if(!connected) {
+    //vibe!
+    vibes_long_pulse();
+  }
+  layer_set_hidden(bitmap_layer_get_layer(bluetooth_layer), !connected);
+}
+
+void bluetooth_connection_callback(bool connected) {
+  toggle_bluetooth_icon(connected);
+}
+
+void battery_layer_update_callback(Layer *me, GContext* ctx) {        
+  //draw the remaining battery percentage
+  graphics_context_set_stroke_color(ctx, GColorWhite);
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, GRect(2, 2, ((batteryPercent/100.0)*11.0), 5), 0, GCornerNone);
+}
+	
 void update_layer(Layer *me, GContext* ctx) 
 {
 	//watchface drawing
@@ -31,9 +84,9 @@ void update_layer(Layer *me, GContext* ctx)
   	struct tm *tick_time = localtime(&temp);
 	
 	//get weekday
-	strftime(text, 10, "%A", tick_time);
+	strftime(text, 8, "%l:%M%P", tick_time);
 	//lowercase
-	text[0] += 32;
+	//text[0] += 32;
 	
 	if(weekday == 1)
 		graphics_draw_text(ctx, text,  raleway_font, GRect(0,-6,144,100), GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
@@ -47,19 +100,19 @@ void update_layer(Layer *me, GContext* ctx)
 	strftime(text, 10, "%d", tick_time);
 	
 	if(date == 1)
-		graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(0,62,144,100), GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+		graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(124,86,23,30), GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 	
-	strftime(text, 10, "%B", tick_time);
+	strftime(text, 10, "%a", tick_time);
 	//lowercase
 	text[0] += 32;
 	
 	if(month == 1)
-		graphics_draw_text(ctx, text,  fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0,114,144,100), GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+		graphics_draw_text(ctx, text,  fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0,88,16,25), GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 	
 	//draw hands
 	GPoint center = GPoint(71,99);
-	int16_t secondHandLength = 64;
-	int16_t minuteHandLength = 54;
+	int16_t secondHandLength = 66;
+	int16_t minuteHandLength = 60;
 	int16_t hourHandLength = 34;
 	GPoint secondHand;
 	GPoint minuteHand;
@@ -166,9 +219,37 @@ void init()
 	layer_set_update_proc(layer, update_layer);
 	layer_add_child(window_layer, layer);	
 	
+    bluetooth_image = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_BLUETOOTH);
+    GRect frame3 = (GRect) {
+    .origin = { .x = 67, .y = 157 },
+    .size = bluetooth_image->bounds.size
+    };
+    bluetooth_layer = bitmap_layer_create(frame3);
+    bitmap_layer_set_bitmap(bluetooth_layer, bluetooth_image);
+    layer_add_child(window_layer, bitmap_layer_get_layer(bluetooth_layer));
+	
+    battery_image = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_BATTERY);
+    GRect frame4 = (GRect) {
+    .origin = { .x = 63, .y = 27 },
+    .size = battery_image->bounds.size
+    };
+    battery_layer = bitmap_layer_create(frame4);
+    battery_image_layer = bitmap_layer_create(frame4);
+    bitmap_layer_set_bitmap(battery_image_layer, battery_image);
+    layer_set_update_proc(bitmap_layer_get_layer(battery_layer), battery_layer_update_callback);
+  
+    layer_add_child(window_layer, bitmap_layer_get_layer(battery_image_layer));
+    layer_add_child(window_layer, bitmap_layer_get_layer(battery_layer));
+  
+	toggle_bluetooth_icon(bluetooth_connection_service_peek());
+    update_battery(battery_state_service_peek());
+
 	//subscribe to seconds tick event
 	tick_timer_service_subscribe(SECOND_UNIT, (TickHandler) tick);
-	
+		
+    bluetooth_connection_service_subscribe(bluetooth_connection_callback);
+    battery_state_service_subscribe(&update_battery);
+
 	// Register callbacks
 	app_message_register_inbox_received(inbox_received_callback);
 	app_message_register_inbox_dropped(inbox_dropped_callback);
@@ -177,6 +258,7 @@ void init()
 
 	// Open AppMessage
 	app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
+	
 }
 
 void deinit() 
@@ -184,6 +266,23 @@ void deinit()
 	layer_destroy(layer);
 	fonts_unload_custom_font(raleway_font);
 	gbitmap_destroy(background);
+	
+	bluetooth_connection_service_unsubscribe();
+    battery_state_service_unsubscribe();
+	
+	layer_remove_from_parent(bitmap_layer_get_layer(bluetooth_layer));
+    bitmap_layer_destroy(bluetooth_layer);
+    gbitmap_destroy(bluetooth_image);
+    bluetooth_image = NULL;
+	
+    layer_remove_from_parent(bitmap_layer_get_layer(battery_layer));
+    bitmap_layer_destroy(battery_layer);
+    gbitmap_destroy(battery_image);
+    battery_image = NULL;
+	
+    layer_remove_from_parent(bitmap_layer_get_layer(battery_image_layer));
+    bitmap_layer_destroy(battery_image_layer);
+	
 	window_destroy(window);
 }
 

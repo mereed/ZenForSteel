@@ -9,19 +9,35 @@
     "resources": {
         "media": [
             {
-                "file": "images/icon.png",
-                "menuIcon": true,
-                "name": "ICON",
+                "file": "images/icon_bluetooth.png",
+                "name": "IMAGE_BLUETOOTH",
+                "type": "png"
+            },
+            {
+                "file": "images/icon_battery (5).png",
+                "name": "IMAGE_BATTERY",
+                "type": "png"
+            },
+            {
+                "file": "images/icon_battery_charge (5).png",
+                "name": "IMAGE_BATTERY_CHARGE",
+                "type": "png"
+            },
+            {
+                "file": "images/background.png",
+                "name": "IMAGE_BACKGROUND",
                 "type": "png"
             },
             {
                 "file": "fonts/Raleway Thin.ttf",
                 "name": "FONT_RALEWAY_22",
+                "trackingAdjust": 1,
                 "type": "font"
             },
             {
-                "file": "images/background.png",
-                "name": "IMAGE_BACKGROUND",
+                "file": "images/icon.png",
+                "menuIcon": true,
+                "name": "ICON",
                 "type": "png"
             }
         ]
